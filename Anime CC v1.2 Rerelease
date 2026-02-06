@@ -246,84 +246,221 @@ task.spawn(function()
 end)
 
 
+
 --========================================================
--- AUTO FARMING TAB
+-- AUTO FARMING TAB (WORKING)
 --========================================================
 local AutoFarmTab = Window:CreateTab("Auto Farming", 4483362458)
-AutoFarmTab:CreateSection("Pack Automation. (NOT WORKING YET)")
+AutoFarmTab:CreateSection("Pack Automation")
 
+-- Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 
--- Main toggle
+local player = Players.LocalPlayer
+local CardRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Card")
+
+-- State
 local autoFarmPacksEnabled = false
-
--- Stores which packs are checked
 local selectedPacks = {}
 
 --========================================================
--- AUTO FARM PACKS TOGGLE
+-- FIND PLAYER PLOT
+--========================================================
+local function getPlayerPlot()
+	local plots = workspace:FindFirstChild("Plots")
+	if not plots then return nil end
+
+	for i = 1, 6 do
+		local plot = plots:FindFirstChild(tostring(i))
+		if plot then
+			local display =
+				plot:FindFirstChild("Map")
+				and plot.Map:FindFirstChild("Display")
+				and plot.Map.Display:FindFirstChild("Top")
+				and plot.Map.Display.Top:FindFirstChild("Gui")
+				and plot.Map.Display.Top.Gui:FindFirstChild("Display")
+				and plot.Map.Display.Top.Gui.Display:FindFirstChild("Display")
+
+			if display and typeof(display.Text) == "string" then
+				local textLower = string.lower(display.Text)
+				local playerLower = string.lower(player.Name)
+				if string.find(textLower, playerLower, 1, true) then
+					print("[AutoFarm] Detected player plot:", i, "Text:", display.Text)
+					return i
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+--========================================================
+-- AUTO FARM TOGGLE
 --========================================================
 AutoFarmTab:CreateToggle({
 	Name = "Auto Farm Packs",
 	CurrentValue = false,
 	Flag = "AutoFarmPacks",
-	Callback = function(Value)
-		autoFarmPacksEnabled = Value
+	Callback = function(v)
+		autoFarmPacksEnabled = v
 	end
 })
 
+task.delay(1, function()
+    local flag = Rayfield.Flags["AutoFarmPacks"]
+    if flag and flag.CurrentValue ~= nil then
+        autoFarmPacksEnabled = flag.CurrentValue
+        print("[AutoFarm] Restored Auto Farm:", autoFarmPacksEnabled)
+    end
+end)
+
+
 --========================================================
--- PACK CHECKBOX LIST
+-- PACK FILTER TOGGLES
 --========================================================
 local packsFolder =
 	ReplicatedStorage:FindFirstChild("Assets")
 	and ReplicatedStorage.Assets:FindFirstChild("Packs")
 
 if packsFolder then
-	for _, packModel in ipairs(packsFolder:GetChildren()) do
-		if packModel:IsA("Model") then
-			selectedPacks[packModel.Name] = false
+	for _, pack in ipairs(packsFolder:GetChildren()) do
+		if pack:IsA("Model") then
+			selectedPacks[pack.Name] = false
 
-			AutoFarmTab:CreateToggle({
-				Name = packModel.Name,
-				CurrentValue = false,
-				Flag = "Pack_" .. packModel.Name,
-				Callback = function(Value)
-					selectedPacks[packModel.Name] = Value
-				end
-			})
+AutoFarmTab:CreateToggle({
+    Name = pack.Name,
+    CurrentValue = false,
+    Flag = "Pack_" .. pack.Name,
+    Callback = function(v)
+        selectedPacks[pack.Name] = v
+    end
+})
+
 		end
 	end
-else
-	AutoFarmTab:CreateLabel("⚠ Packs folder not found")
 end
 
---========================================================
--- PACK PURCHASE HANDLER (PLACEHOLDER)
---========================================================
-local function buyPack(packName)
-	-- 🔧 THIS IS WHERE WE WILL HOOK THE REAL REMOTE
-	-- Example (NOT FINAL):
-	-- ReplicatedStorage.Remotes.BuyPack:FireServer(packName)
+task.delay(1, function()
+    for packName, _ in pairs(selectedPacks) do
+        local flag = Rayfield.Flags["Pack_" .. packName]
+        if flag and flag.CurrentValue ~= nil then
+            selectedPacks[packName] = flag.CurrentValue
+            print("[AutoFarm] Restored pack:", packName, flag.CurrentValue)
+        end
+    end
+end)
 
-	print("[AutoFarm] Attempting to buy pack:", packName)
+
+--========================================================
+-- MUTATION CHECK
+--========================================================
+local function mutationPasses(packModel)
+	-- No mutation filters → allow all
+	if not (_G.Gold or _G.Emerald or _G.Void or _G.Diamond or _G.Rainbow) then
+		return true
+	end
+
+	for mutationName, toggle in pairs({
+		Gold = _G.Gold,
+		Emerald = _G.Emerald,
+		Void = _G.Void,
+		Diamond = _G.Diamond,
+		Rainbow = _G.Rainbow
+	}) do
+		if toggle and packModel:FindFirstChild(mutationName) then
+			return true
+		end
+	end
+
+	return false
 end
 
+
+
 --========================================================
--- AUTO BUY LOOP
+-- AUTO FARM LOOP
 --========================================================
 task.spawn(function()
-	while task.wait(1) do
-		if not autoFarmPacksEnabled then continue end
+	local cachedPlot = nil
 
+	while task.wait(1) do
+		if not autoFarmPacksEnabled then
+			cachedPlot = nil
+			continue
+		end
+
+		-- Detect plot ONCE
+		if not cachedPlot then
+			cachedPlot = getPlayerPlot()
+			if not cachedPlot then
+				warn("[AutoFarm] Plot not detected yet, retrying...")
+				continue
+			end
+		end
+
+		-- Loop through selected packs
 		for packName, isEnabled in pairs(selectedPacks) do
 			if not autoFarmPacksEnabled then break end
 			if isEnabled then
-				buyPack(packName)
-				task.wait(0.3) -- spacing to avoid spam / kick
+				-- Find all packs in workspace.Client.Packs
+				for _, packModel in ipairs(workspace.Client.Packs:GetChildren()) do
+					-- Must belong to this plot
+					if packModel.Name:sub(-2) == "-" .. tostring(cachedPlot) then
+						-- Check pack toggle matches pack name
+						if packModel:FindFirstChild(packName) then
+							-- Check mutation filters
+							if mutationPasses(packModel) then
+								-- Fire remote to buy pack
+								CardRemote:FireServer("BuyPack", packModel.Name)
+								print("[AutoFarm] Bought pack:", packModel.Name)
+								task.wait(0.2) -- spacing to avoid spam/kick
+							end
+						end
+					end
+				end
 			end
 		end
 	end
+end)
+
+
+
+
+--========================================================
+-- MUTATION FILTERS TAB
+--========================================================
+local MutationTab = Window:CreateTab("Mutation Filters", 4483362458)
+MutationTab:CreateSection("Allowed Mutations")
+
+local mutationFilters = {
+	Gold = false,
+	Emerald = false,
+	Void = false,
+	Diamond = false,
+	Rainbow = false
+}
+
+for mutation, _ in pairs(mutationFilters) do
+	MutationTab:CreateToggle({
+		Name = mutation,
+		CurrentValue = false,
+		Flag = "Mutation_" .. mutation,
+		Callback = function(v)
+			mutationFilters[mutation] = v
+		end
+	})
+end
+
+task.delay(1, function()
+    for mutation, _ in pairs(mutationFilters) do
+        local flag = Rayfield.Flags["Mutation_" .. mutation]
+        if flag and flag.CurrentValue ~= nil then
+            mutationFilters[mutation] = flag.CurrentValue
+            print("[Mutation] Restored", mutation, flag.CurrentValue)
+        end
+    end
 end)
 
 --========================================================
@@ -731,6 +868,7 @@ end)
 --========================================================
 -- STREAMSAVER TAB
 --========================================================
+--[[
 local StreamSaverTab = Window:CreateTab("StreamSaver", 4483362458)
 StreamSaverTab:CreateSection("Display Tools")
 
@@ -765,3 +903,4 @@ StreamSaverTab:CreateButton({
 		end
 	end
 })
+]]
