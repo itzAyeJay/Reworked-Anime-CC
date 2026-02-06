@@ -1,0 +1,767 @@
+--========================================================
+-- Rayfield UI Loader
+--========================================================
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+--========================================================
+-- Services & Player References
+--========================================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local root = character:WaitForChild("HumanoidRootPart")
+
+--========================================================
+-- Window Setup
+--========================================================
+local Window = Rayfield:CreateWindow({
+	Name = "DurDom's Anime Card Collection",
+	LoadingTitle = "DurDom's Anime Card Collection",
+	LoadingSubtitle = "by itzayejay",
+	ShowText = "DurDom",
+	Theme = "Default",
+	ToggleUIKeybind = "K",
+	ConfigurationSaving = {
+		Enabled = true,
+		FileName = "DurDomHub"
+	},
+	KeySystem = false
+})
+
+--========================================================
+-- PLAYER TAB
+--========================================================
+local PlayerTab = Window:CreateTab("Player", 4483362458)
+PlayerTab:CreateSection("Movement")
+
+local DEFAULT_WALKSPEED = 25
+local speedValue = 25
+local speedEnabled = false
+
+-- Speed Slider
+local SpeedSlider = PlayerTab:CreateSlider({
+	Name = "Speed",
+	Range = {1, 150},
+	Increment = 1,
+	Suffix = "Speed",
+	CurrentValue = speedValue,
+	Flag = "SpeedSlider",
+	Callback = function(Value)
+		speedValue = Value
+	end
+})
+
+-- Speed Toggle
+local SpeedToggle = PlayerTab:CreateToggle({
+	Name = "Enable Speed",
+	CurrentValue = false,
+	Flag = "SpeedToggle",
+	Callback = function(Value)
+		speedEnabled = Value
+		if humanoid then
+			humanoid.WalkSpeed = speedEnabled and speedValue or DEFAULT_WALKSPEED
+		end
+	end
+})
+
+-- Speed Handler
+RunService.RenderStepped:Connect(function()
+	if not speedEnabled then return end
+	if not humanoid or not root then return end
+
+	humanoid.WalkSpeed = speedValue
+	local moveDir = humanoid.MoveDirection
+	if moveDir.Magnitude > 0 then
+		root.AssemblyLinearVelocity =
+			Vector3.new(moveDir.X * speedValue, root.AssemblyLinearVelocity.Y, moveDir.Z * speedValue)
+	end
+end)
+
+-- Respawn Safety
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	root = char:WaitForChild("HumanoidRootPart")
+	humanoid.WalkSpeed = DEFAULT_WALKSPEED
+end)
+
+--========================================================
+-- ANTI-AFK TOGGLE
+--========================================================
+local antiAfkEnabled = false
+
+PlayerTab:CreateToggle({
+	Name = "Anti AFK",
+	CurrentValue = false,
+	Flag = "AntiAFK",
+	Callback = function(Value)
+		antiAfkEnabled = Value
+	end
+})
+
+-- Anti-AFK handler
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+-- Connect Idled event
+player.Idled:Connect(function()
+	if not antiAfkEnabled then return end
+	VirtualUser:CaptureController()
+	VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+	task.wait(0.5)
+	VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Optional tiny nudge every 60s (keeps AFK detection off)
+task.spawn(function()
+	while task.wait(60) do
+		if not antiAfkEnabled then continue end
+		RunService.RenderStepped:Wait()
+	end
+end)
+
+
+--========================================================
+-- GAME TAB
+--========================================================
+local GameTab = Window:CreateTab("Game", 4483362458)
+GameTab:CreateSection("Auto Farms")
+
+--========================================================
+-- GOLD TOKEN FARM
+--========================================================
+local goldFarmEnabled = false
+
+GameTab:CreateToggle({
+	Name = "Gold Token Farm",
+	CurrentValue = false,
+	Flag = "GoldTokenFarm",
+	Callback = function(Value)
+		goldFarmEnabled = Value
+	end
+})
+
+task.spawn(function()
+	while task.wait(0.5) do
+		if not goldFarmEnabled then continue end
+		if not root then continue end
+
+		local tokenFolder = workspace:FindFirstChild("Items")
+			and workspace.Items:FindFirstChild("Tokens")
+			and workspace.Items.Tokens:FindFirstChild("Client")
+
+		if tokenFolder then
+			for _, token in ipairs(tokenFolder:GetChildren()) do
+				if not goldFarmEnabled then break end
+				if token:IsA("BasePart") then
+					root.CFrame = token.CFrame + Vector3.new(0, 2, 0)
+					task.wait(0.15)
+				end
+			end
+		end
+	end
+end)
+
+--========================================================
+-- BOOST FARM
+--========================================================
+local boostFarmEnabled = false
+
+GameTab:CreateToggle({
+	Name = "Boosts Farm",
+	CurrentValue = false,
+	Flag = "BoostFarm",
+	Callback = function(Value)
+		boostFarmEnabled = Value
+	end
+})
+
+local boostPaths = {
+	{"Items","Misc","Collectables","TravelToken1"},
+	{"Items","Misc","Collectables","TravelToken2"},
+	{"Items","Misc","Collectables","HatchTime","Part"},
+	{"Items","Misc","Collectables","Luck","Part"}
+}
+
+task.spawn(function()
+	while task.wait(0.75) do
+		if not boostFarmEnabled then continue end
+		if not root then continue end
+
+		for _, path in ipairs(boostPaths) do
+			if not boostFarmEnabled then break end
+
+			local obj = workspace
+			for _, name in ipairs(path) do
+				obj = obj:FindFirstChild(name)
+				if not obj then break end
+			end
+
+			if obj and obj:IsA("BasePart") and obj.Transparency < 1 then
+				root.CFrame = obj.CFrame + Vector3.new(0, 2, 0)
+				task.wait(0.2)
+			end
+		end
+	end
+end)
+
+--========================================================
+-- TRAVELING MERCHANT
+--========================================================
+local merchantTPEnabled = false
+
+GameTab:CreateToggle({
+	Name = "Auto Traveling Merchant",
+	CurrentValue = false,
+	Flag = "MerchantTP",
+	Callback = function(Value)
+		merchantTPEnabled = Value
+	end
+})
+
+task.spawn(function()
+	while task.wait(1) do
+		if not merchantTPEnabled then continue end
+		if not root then continue end
+
+		local merchant = workspace:FindFirstChild("Items")
+			and workspace.Items:FindFirstChild("Merchant")
+			and workspace.Items.Merchant:FindFirstChild("Client")
+			and workspace.Items.Merchant.Client:FindFirstChild("MerchantStand")
+
+		if merchant and merchant:IsA("Model") then
+			local part = merchant:FindFirstChildWhichIsA("BasePart")
+			if part then
+				root.CFrame = part.CFrame + Vector3.new(0, 2, 0)
+			end
+		end
+	end
+end)
+
+
+--========================================================
+-- AUTO FARMING TAB
+--========================================================
+local AutoFarmTab = Window:CreateTab("Auto Farming", 4483362458)
+AutoFarmTab:CreateSection("Pack Automation. (NOT WORKING YET)")
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Main toggle
+local autoFarmPacksEnabled = false
+
+-- Stores which packs are checked
+local selectedPacks = {}
+
+--========================================================
+-- AUTO FARM PACKS TOGGLE
+--========================================================
+AutoFarmTab:CreateToggle({
+	Name = "Auto Farm Packs",
+	CurrentValue = false,
+	Flag = "AutoFarmPacks",
+	Callback = function(Value)
+		autoFarmPacksEnabled = Value
+	end
+})
+
+--========================================================
+-- PACK CHECKBOX LIST
+--========================================================
+local packsFolder =
+	ReplicatedStorage:FindFirstChild("Assets")
+	and ReplicatedStorage.Assets:FindFirstChild("Packs")
+
+if packsFolder then
+	for _, packModel in ipairs(packsFolder:GetChildren()) do
+		if packModel:IsA("Model") then
+			selectedPacks[packModel.Name] = false
+
+			AutoFarmTab:CreateToggle({
+				Name = packModel.Name,
+				CurrentValue = false,
+				Flag = "Pack_" .. packModel.Name,
+				Callback = function(Value)
+					selectedPacks[packModel.Name] = Value
+				end
+			})
+		end
+	end
+else
+	AutoFarmTab:CreateLabel("⚠ Packs folder not found")
+end
+
+--========================================================
+-- PACK PURCHASE HANDLER (PLACEHOLDER)
+--========================================================
+local function buyPack(packName)
+	-- 🔧 THIS IS WHERE WE WILL HOOK THE REAL REMOTE
+	-- Example (NOT FINAL):
+	-- ReplicatedStorage.Remotes.BuyPack:FireServer(packName)
+
+	print("[AutoFarm] Attempting to buy pack:", packName)
+end
+
+--========================================================
+-- AUTO BUY LOOP
+--========================================================
+task.spawn(function()
+	while task.wait(1) do
+		if not autoFarmPacksEnabled then continue end
+
+		for packName, isEnabled in pairs(selectedPacks) do
+			if not autoFarmPacksEnabled then break end
+			if isEnabled then
+				buyPack(packName)
+				task.wait(0.3) -- spacing to avoid spam / kick
+			end
+		end
+	end
+end)
+
+--========================================================
+-- AUTO GRADING TAB (FIXED DROPDOWN CALLBACK)
+--========================================================
+local AutoGradeTab = Window:CreateTab("Auto Grading", 4483362458)
+AutoGradeTab:CreateSection("Card Grading Automation")
+
+-- Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GradeRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Grade")
+
+-- State
+local autoGradeEnabled = false
+local selectedCharacter = nil
+local lastDropdownSelection = nil
+local GRADE_DELAY = 0.05
+
+-- Character data
+local CharacterCategories = {
+	["One Piece"] = {"Luffy","Nami","Chopper","Usopp","Robin","Franky","Jimbei","Sanji","Zoro"},
+	["Naruto"] = {"Naruto","Sakura","Shikamaru","Hinata","Rock Lee","Gaara","Sasuke","Kakashi","Minato"},
+	["Bleach"] = {"Ichigo","Kon","Orihime","Chad","Ury","Rukia","Renji","Kenpachi","Urahara"},
+	["Demon Slayer"] = {"Tanjiro","Nezuko","Inosuke","Zenitsu","Rengoku","Mitsuri","Giyu","Obanai","Sanemi"},
+	["Jujutsu Kaisen"] = {"Itadori","Nobara","Megumi","Toge","Maki","Todo","Yuta","Gojo","Sukuna"},
+	["Dragon Ball"] = {"Goku","Vegeta","Krillin","Piccolo","Trunks","Gohan","Goku Black","Broly","Beerus"},
+	["Fire Force"] = {"Shinra","Iris","Tamaki","Obi","Hibana","Arthur","Sho","Benimaru"},
+	["One Punch Man"] = {"Saitama","King","Fubuki","Sonic","Child Emperor","Genos","Bang","Atomic Samurai","Tatsumaki"},
+	["Hunter x Hunter"] = {"Gon","Leorio","Shizuku","Kurapike","Kite","Killua","Hisoka","Neferpitou","Netero"},
+	["Solo Leveling"] = {"Sung Jinwoo","Cha Hae-In","Tank","Baek Yoonho","Choi Jong-In","Metus","Go Gunhee","Beru","Igris"},
+	["Attack on Titan"] = {"Eren","Sasha","Armin","Reiner","Annie","Hange","Mikasa","Levi","Historia"},
+	["Chainsaw Man"] = {"Denji","Kobeni","Himeno","Aki","Power","Galgali","Angel Devil","Reze","Makima"},
+	["Haikyuu"] = {"Kageyama","Nishinoya","Aone","Kuroo","Bokuto","Miya Twins","Oikawa","Ushijima"},
+	["Blue Lock"] = {"Isagi","Bachira","Chigiri","Kunigami","Nagi","Barou","Shidou","Rin","Itoshi Sae"},
+	["Black Clover"] = {"Asta","Yuno","Noelle","Luck","William","Nacht","Mereoleona","Yami","Julius"},
+	["Tokyo Ghoul"] = {"Ken Kaneki","Touka Kirishima","Hinami Fueguchi","Shuu Tsukiyama","Kishou Arima","Koutarou Amon","Rize Kamishiro","Eto Yoshimura","Kishou Arima (Final)"}
+}
+
+-- Category display order
+local CategoryOrder = {
+	"One Piece","Naruto","Bleach","Demon Slayer","Jujutsu Kaisen",
+	"Dragon Ball","Fire Force","One Punch Man","Hunter x Hunter",
+	"Solo Leveling","Attack on Titan","Chainsaw Man","Haikyuu",
+	"Blue Lock","Black Clover","Tokyo Ghoul"
+}
+
+-- Auto Grade toggle
+AutoGradeTab:CreateToggle({
+	Name = "Auto Grade",
+	CurrentValue = false,
+	Flag = "AutoGradeToggle",
+	Callback = function(Value)
+		autoGradeEnabled = Value
+		-- Refresh selected character when toggling on
+		if Value and lastDropdownSelection then
+			selectedCharacter = lastDropdownSelection
+		end
+	end
+})
+
+-- Dropdowns (fixed to always update selectedCharacter)
+for _, categoryName in ipairs(CategoryOrder) do
+	local characterList = CharacterCategories[categoryName]
+	if not characterList then continue end
+
+	AutoGradeTab:CreateDropdown({
+		Name = categoryName,
+		Options = characterList,
+		CurrentOption = nil,
+		Flag = "AutoGrade_" .. categoryName,
+		Callback = function(Option)
+			-- Force selection even if same value is reselected
+			if typeof(Option) == "table" then
+				selectedCharacter = Option[1]
+			else
+				selectedCharacter = Option
+			end
+			lastDropdownSelection = selectedCharacter
+		end
+	})
+end
+
+-- Auto Grade loop (fires correctly every tick)
+task.spawn(function()
+	while task.wait(GRADE_DELAY) do
+		if not autoGradeEnabled then continue end
+		if not selectedCharacter then continue end
+		if typeof(selectedCharacter) ~= "string" then continue end
+
+		local args = {"Roll", selectedCharacter}
+		GradeRemote:FireServer(unpack(args))
+	end
+end)
+
+--========================================================
+-- MISC TAB
+--========================================================
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+MiscTab:CreateSection("Anti AFK Patrol")
+
+local antiAfkPatrolEnabled = false
+
+MiscTab:CreateToggle({
+	Name = "Anti AFK Patrol Walk",
+	CurrentValue = false,
+	Flag = "AntiAfkPatrolWalk",
+	Callback = function(Value)
+		antiAfkPatrolEnabled = Value
+	end
+})
+
+-- Patrol points
+local PATROL_POINTS = {
+	Vector3.new(-535, 8, -398),
+	Vector3.new(-535, 8, -228),
+	Vector3.new(-534, 8, -49),
+	Vector3.new(-470, 8, -12)
+}
+
+local STRAY_DISTANCE = 35
+
+local function getClosestPointIndex(pos)
+	local closestIndex = 1
+	local closestDistance = math.huge
+
+	for i, point in ipairs(PATROL_POINTS) do
+		local dist = (pos - point).Magnitude
+		if dist < closestDistance then
+			closestDistance = dist
+			closestIndex = i
+		end
+	end
+
+	return closestIndex
+end
+
+--========================================================
+-- ANTI-AFK PATROL LOOP (FINAL LOGIC)
+--========================================================
+task.spawn(function()
+	local index = 1
+	local direction = 1
+	local initialized = false
+
+	while task.wait(0.25) do
+		if not antiAfkPatrolEnabled then
+			initialized = false
+			continue
+		end
+
+		if not humanoid or not root then
+			continue
+		end
+
+		-- First enable: snap to closest point
+		if not initialized then
+			index = getClosestPointIndex(root.Position)
+			initialized = true
+		end
+
+		local target = PATROL_POINTS[index]
+
+		-- Walk to target
+		humanoid:MoveTo(target)
+
+		-- Wait until close OR timeout
+		local timeout = tick() + 6
+		while tick() < timeout do
+			if not antiAfkPatrolEnabled then break end
+			if (root.Position - target).Magnitude <= 3 then
+				break
+			end
+			task.wait(0.1)
+		end
+
+		-- === ALWAYS ADVANCE TO NEXT POINT ===
+		index += direction
+
+		-- Reverse at ends (ping-pong patrol)
+		if index > #PATROL_POINTS then
+			index = #PATROL_POINTS - 1
+			direction = -1
+		elseif index < 1 then
+			index = 2
+			direction = 1
+		end
+	end
+end)
+
+-- SERVER HOPPING
+local merchantHopEnabled = false
+local hopping = false
+
+MiscTab:CreateToggle({
+	Name = "Server Hop Until Merchant",
+	CurrentValue = false,
+	Flag = "MerchantServerHop",
+	Callback = function(Value)
+		merchantHopEnabled = Value
+	end
+})
+
+local PLACE_ID = 76285745979410
+local visitedServers = {}
+
+local function merchantExists()
+	local folder =
+		workspace:FindFirstChild("Items")
+		and workspace.Items:FindFirstChild("Merchant")
+		and workspace.Items.Merchant:FindFirstChild("Client")
+
+	return folder and #folder:GetChildren() > 0
+end
+
+local function hopServer()
+	if hopping then return end
+	hopping = true
+
+	local success, response = pcall(function()
+		return HttpService:JSONDecode(
+			game:HttpGet(
+				"https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+			)
+		)
+	end)
+
+	if success and response and response.data then
+		for _, server in ipairs(response.data) do
+			if server.playing < server.maxPlayers and not visitedServers[server.id] then
+				visitedServers[server.id] = true
+				TeleportService:TeleportToPlaceInstance(PLACE_ID, server.id, player)
+				return
+			end
+		end
+	end
+
+	hopping = false
+end
+
+--========================================================
+-- SERVER HOP LOOP
+--========================================================
+task.spawn(function()
+	while task.wait(5) do
+		if not merchantHopEnabled then
+			hopping = false
+			continue
+		end
+
+		if merchantExists() then
+			-- Merchant found, stay in server
+			hopping = false
+			continue
+		end
+
+		-- Merchant not found → hop
+		hopServer()
+	end
+end)
+
+--========================================================
+-- MISC TAB (SERVER HOP ONCE)
+--========================================================
+
+-- Reuse window safely
+
+
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local PLACE_ID = game.PlaceId
+
+local function hopServerOnce()
+	local servers = {}
+	local cursor = nil
+
+	repeat
+		local url =
+			"https://games.roblox.com/v1/games/" .. PLACE_ID ..
+			"/servers/Public?sortOrder=Asc&limit=100" ..
+			(cursor and "&cursor=" .. cursor or "")
+
+		local success, response = pcall(function()
+			return game:HttpGet(url)
+		end)
+
+		if not success then break end
+
+		local data = HttpService:JSONDecode(response)
+
+		for _, server in ipairs(data.data or {}) do
+			if server.id ~= game.JobId and server.playing < server.maxPlayers then
+				table.insert(servers, server.id)
+			end
+		end
+
+		cursor = data.nextPageCursor
+	until cursor == nil or #servers > 0
+
+	if #servers > 0 then
+		TeleportService:TeleportToPlaceInstance(
+			PLACE_ID,
+			servers[math.random(#servers)],
+			player
+		)
+	else
+		Rayfield:Notify({
+			Title = "Server Hop",
+			Content = "No available servers found.",
+			Duration = 4
+		})
+	end
+end
+
+MiscTab:CreateButton({
+	Name = "Hop Server Once",
+	Callback = function()
+		hopServerOnce()
+	end
+})
+
+--========================================================
+-- INFINITE YIELD BUTTON
+--========================================================
+
+MiscTab:CreateButton({
+	Name = "Infinite Yield",
+	Callback = function()
+		loadstring(game:HttpGet(
+			"https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"
+		))()
+	end
+})
+
+--========================================================
+-- WEATHER EVENT SERVER HOP
+--========================================================
+
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+local weatherHopEnabled = false
+local weatherHopCooldown = false
+
+MiscTab:CreateToggle({
+	Name = "Weather Event Server Hop",
+	CurrentValue = false,
+	Flag = "WeatherEventHop",
+	Callback = function(Value)
+		weatherHopEnabled = Value
+	end
+})
+
+-- Simple server hop (new server, same place)
+local function hopServer()
+	if weatherHopCooldown then return end
+	weatherHopCooldown = true
+
+	task.delay(5, function()
+		weatherHopCooldown = false
+	end)
+
+	TeleportService:Teleport(game.PlaceId, player)
+end
+
+-- Weather check loop
+task.spawn(function()
+	while task.wait(3) do
+		if not weatherHopEnabled then
+			continue
+		end
+
+		local weatherFolder = workspace:FindFirstChild("VFX")
+			and workspace.VFX:FindFirstChild("Weather")
+
+		-- No weather folder → hop
+		if not weatherFolder then
+			hopServer()
+			continue
+		end
+
+		local children = weatherFolder:GetChildren()
+
+		-- Empty folder → hop
+		if #children == 0 then
+			hopServer()
+			continue
+		end
+
+		-- Only Rain present → hop
+		if #children == 1 and children[1].Name == "Rain" then
+			hopServer()
+			continue
+		end
+
+		-- Any other weather → stay
+	end
+end)
+
+
+--========================================================
+-- STREAMSAVER TAB
+--========================================================
+local StreamSaverTab = Window:CreateTab("StreamSaver", 4483362458)
+StreamSaverTab:CreateSection("Display Tools")
+
+StreamSaverTab:CreateButton({
+	Name = "Set All Plots Display Text",
+	Callback = function()
+		local plotsFolder = workspace:FindFirstChild("Plots")
+		if not plotsFolder then
+			warn("[StreamSaver] Plots folder not found")
+			return
+		end
+
+		for i = 1, 6 do
+			local plot = plotsFolder:FindFirstChild(tostring(i))
+			if plot then
+				local display =
+					plot:FindFirstChild("Map")
+					and plot.Map:FindFirstChild("Display")
+					and plot.Map.Display:FindFirstChild("Top")
+					and plot.Map.Display.Top:FindFirstChild("Gui")
+					and plot.Map.Display.Top.Gui:FindFirstChild("Display")
+					and plot.Map.Display.Top.Gui.Display:FindFirstChild("Display")
+
+				if display and (display:IsA("TextLabel") or display:IsA("TextBox")) then
+					display.Text = "DurDomHub's Collection"
+				else
+					warn("[StreamSaver] Display not found for plot " .. i)
+				end
+			else
+				warn("[StreamSaver] Plot " .. i .. " not found")
+			end
+		end
+	end
+})
